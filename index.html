@@ -755,9 +755,22 @@
                 const end = textarea.selectionEnd;
                 const text = textarea.value;
 
-                textarea.value = text.substring(0, start) + chunk.value + text.substring(end);
+                let chunkValue = chunk.value;
+                const firstChar = chunkValue.charAt(0);
+                const charBeforeCursor = start > 0 ? text.charAt(start - 1) : '';
+
+                // Punctuation that should not have a space before it
+                const punctuation = /^[.,!?;:'")\]\}>\-\u2019\u201D]/;
+
+                // Add space if: there's text before cursor, it doesn't end with whitespace,
+                // and the chunk doesn't start with punctuation
+                if (charBeforeCursor && !/\s/.test(charBeforeCursor) && !punctuation.test(firstChar)) {
+                    chunkValue = ' ' + chunkValue;
+                }
+
+                textarea.value = text.substring(0, start) + chunkValue + text.substring(end);
                 textarea.focus();
-                textarea.selectionStart = textarea.selectionEnd = start + chunk.value.length;
+                textarea.selectionStart = textarea.selectionEnd = start + chunkValue.length;
             }
         }
 
