@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Text Comparison Tool</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jsdiff/5.1.0/diff.min.js"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 10px;
+        }
+        .legend {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 14px;
+        }
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 3px;
+        }
+        .color-same { background: #e0e0e0; }
+        .color-removed { background: #ffcc80; }
+        .color-added { background: #c8e6c9; }
+
+        .container {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 20px;
+            max-width: 1800px;
+            margin: 0 auto;
+        }
+        .panel {
+            background: white;
+            border-radius: 8px;
+            padding: 15px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .panel h2 {
+            margin: 0 0 15px 0;
+            font-size: 18px;
+            color: #444;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .panel h2 .stats {
+            font-size: 12px;
+            font-weight: normal;
+            color: #666;
+        }
+        .input-section {
+            margin-bottom: 15px;
+        }
+        .input-section label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+            color: #555;
+        }
+        .file-input-wrapper {
+            margin-bottom: 10px;
+        }
+        textarea {
+            width: 100%;
+            height: 150px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-family: inherit;
+            font-size: 14px;
+            resize: vertical;
+        }
+        textarea:focus {
+            outline: none;
+            border-color: #666;
+        }
+        .diff-display {
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 10px;
+            min-height: 300px;
+            max-height: 500px;
+            overflow-y: auto;
+            background: #fafafa;
+            font-size: 14px;
+            line-height: 1.6;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        .diff-display .same {
+            background: #e0e0e0;
+            padding: 1px 0;
+        }
+        .diff-display .removed {
+            background: #ffcc80;
+            padding: 1px 0;
+        }
+        .diff-display .added {
+            background: #c8e6c9;
+            padding: 1px 0;
+        }
+        .diff-display .placeholder {
+            background: #ffcc80;
+            opacity: 0.3;
+            padding: 1px 0;
+        }
+
+        /* Center panel styles */
+        .center-panel textarea {
+            height: 300px;
+        }
+        .merge-buttons {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+        }
+        .merge-buttons button {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: background 0.2s;
+        }
+        .btn-left {
+            background: #ffcc80;
+            color: #333;
+        }
+        .btn-left:hover {
+            background: #ffb74d;
+        }
+        .btn-right {
+            background: #c8e6c9;
+            color: #333;
+        }
+        .btn-right:hover {
+            background: #a5d6a7;
+        }
+        .btn-clear {
+            background: #e0e0e0;
+            color: #333;
+        }
+        .btn-clear:hover {
+            background: #bdbdbd;
+        }
+        .btn-copy {
+            background: #90caf9;
+            color: #333;
+        }
+        .btn-copy:hover {
+            background: #64b5f6;
+        }
+
+        /* Chunk selection */
+        .chunk-list {
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            max-height: 200px;
+            overflow-y: auto;
+            margin-bottom: 15px;
+        }
+        .chunk-item {
+            display: flex;
+            align-items: flex-start;
+            padding: 8px 10px;
+            border-bottom: 1px solid #eee;
+            gap: 10px;
+        }
+        .chunk-item:last-child {
+            border-bottom: none;
+        }
+        .chunk-item button {
+            flex-shrink: 0;
+            padding: 4px 10px;
+            font-size: 12px;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+        .chunk-text {
+            flex: 1;
+            font-size: 13px;
+            color: #555;
+            max-height: 60px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .chunk-type-removed {
+            background: #fff3e0;
+        }
+        .chunk-type-added {
+            background: #e8f5e9;
+        }
+
+        .summary {
+            background: #f5f5f5;
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+            font-size: 13px;
+        }
+        .summary-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 3px 0;
+        }
+
+        @media (max-width: 1200px) {
+            .container {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <h1>Text Comparison Tool</h1>
+
+    <div class="legend">
+        <div class="legend-item">
+            <div class="legend-color color-same"></div>
+            <span>Unchanged</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color color-removed"></div>
+            <span>Removed</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color color-added"></div>
+            <span>Added</span>
+        </div>
+    </div>
+
+    <div class="container">
+        <!-- Left Panel -->
+        <div class="panel">
+            <h2>
+                Original Text
+                <span class="stats" id="left-stats"></span>
+            </h2>
+            <div class="input-section">
+                <div class="file-input-wrapper">
+                    <input type="file" id="left-file" accept=".txt,.md,.html,.css,.js,.json,.xml,.csv">
+                </div>
+                <textarea id="left-input" placeholder="Paste or type your original text here..."></textarea>
+            </div>
+            <div class="summary" id="left-summary">
+                <strong>Summary:</strong> Enter text to compare
+            </div>
+            <div class="diff-display" id="left-diff"></div>
+        </div>
+
+        <!-- Center Panel -->
+        <div class="panel center-panel">
+            <h2>Merged Result</h2>
+            <div class="merge-buttons">
+                <button class="btn-left" onclick="useLeftText()">Use All Left</button>
+                <button class="btn-right" onclick="useRightText()">Use All Right</button>
+                <button class="btn-clear" onclick="clearMerged()">Clear</button>
+                <button class="btn-copy" onclick="copyMerged()">Copy</button>
+            </div>
+
+            <div class="summary" id="merge-summary">
+                <strong>Changes:</strong> Select chunks below to build your merged text
+            </div>
+
+            <div class="chunk-list" id="chunk-list">
+                <div style="padding: 20px; color: #888; text-align: center;">
+                    Enter text on both sides to see differences
+                </div>
+            </div>
+
+            <label for="merged-output">Your merged text:</label>
+            <textarea id="merged-output" placeholder="Build your merged text here by selecting chunks or editing directly..."></textarea>
+        </div>
+
+        <!-- Right Panel -->
+        <div class="panel">
+            <h2>
+                Modified Text
+                <span class="stats" id="right-stats"></span>
+            </h2>
+            <div class="input-section">
+                <div class="file-input-wrapper">
+                    <input type="file" id="right-file" accept=".txt,.md,.html,.css,.js,.json,.xml,.csv">
+                </div>
+                <textarea id="right-input" placeholder="Paste or type your modified text here..."></textarea>
+            </div>
+            <div class="summary" id="right-summary">
+                <strong>Summary:</strong> Enter text to compare
+            </div>
+            <div class="diff-display" id="right-diff"></div>
+        </div>
+    </div>
+
+    <script>
+        // Elements
+        const leftInput = document.getElementById('left-input');
+        const rightInput = document.getElementById('right-input');
+        const leftDiff = document.getElementById('left-diff');
+        const rightDiff = document.getElementById('right-diff');
+        const leftFile = document.getElementById('left-file');
+        const rightFile = document.getElementById('right-file');
+        const mergedOutput = document.getElementById('merged-output');
+        const chunkList = document.getElementById('chunk-list');
+        const leftSummary = document.getElementById('left-summary');
+        const rightSummary = document.getElementById('right-summary');
+        const mergeSummary = document.getElementById('merge-summary');
+        const leftStats = document.getElementById('left-stats');
+        const rightStats = document.getElementById('right-stats');
+
+        let currentDiffs = [];
+
+        // File reading
+        leftFile.addEventListener('change', (e) => readFile(e, leftInput));
+        rightFile.addEventListener('change', (e) => readFile(e, rightInput));
+
+        function readFile(event, targetTextarea) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    targetTextarea.value = e.target.result;
+                    updateDiff();
+                };
+                reader.readAsText(file);
+            }
+        }
+
+        // Debounced diff update
+        let debounceTimer;
+        function debouncedUpdate() {
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(updateDiff, 300);
+        }
+
+        leftInput.addEventListener('input', debouncedUpdate);
+        rightInput.addEventListener('input', debouncedUpdate);
+
+        function updateDiff() {
+            const leftText = leftInput.value;
+            const rightText = rightInput.value;
+
+            // Update stats
+            leftStats.textContent = `${countWords(leftText)} words, ${leftText.length} chars`;
+            rightStats.textContent = `${countWords(rightText)} words, ${rightText.length} chars`;
+
+            if (!leftText && !rightText) {
+                leftDiff.innerHTML = '<span style="color: #888;">Enter text to see comparison</span>';
+                rightDiff.innerHTML = '<span style="color: #888;">Enter text to see comparison</span>';
+                chunkList.innerHTML = '<div style="padding: 20px; color: #888; text-align: center;">Enter text on both sides to see differences</div>';
+                leftSummary.innerHTML = '<strong>Summary:</strong> Enter text to compare';
+                rightSummary.innerHTML = '<strong>Summary:</strong> Enter text to compare';
+                mergeSummary.innerHTML = '<strong>Changes:</strong> Select chunks below to build your merged text';
+                return;
+            }
+
+            // Use word-level diff for better readability
+            const diffs = Diff.diffWords(leftText, rightText);
+            currentDiffs = diffs;
+
+            // Calculate statistics
+            let addedCount = 0, removedCount = 0, unchangedCount = 0;
+            let addedWords = 0, removedWords = 0;
+
+            diffs.forEach(part => {
+                const wordCount = countWords(part.value);
+                if (part.added) {
+                    addedCount++;
+                    addedWords += wordCount;
+                } else if (part.removed) {
+                    removedCount++;
+                    removedWords += wordCount;
+                } else {
+                    unchangedCount++;
+                }
+            });
+
+            // Build diff displays
+            let leftHtml = '';
+            let rightHtml = '';
+
+            diffs.forEach(part => {
+                const escaped = escapeHtml(part.value);
+
+                if (part.added) {
+                    // Added - show on right with green, show placeholder on left
+                    const placeholder = createPlaceholder(part.value);
+                    leftHtml += `<span class="placeholder">${placeholder}</span>`;
+                    rightHtml += `<span class="added">${escaped}</span>`;
+                } else if (part.removed) {
+                    // Removed - show on left with orange, show placeholder on right
+                    const placeholder = createPlaceholder(part.value);
+                    leftHtml += `<span class="removed">${escaped}</span>`;
+                    rightHtml += `<span class="placeholder">${placeholder}</span>`;
+                } else {
+                    // Unchanged - show on both with grey
+                    leftHtml += `<span class="same">${escaped}</span>`;
+                    rightHtml += `<span class="same">${escaped}</span>`;
+                }
+            });
+
+            leftDiff.innerHTML = leftHtml || '<span style="color: #888;">No text</span>';
+            rightDiff.innerHTML = rightHtml || '<span style="color: #888;">No text</span>';
+
+            // Update summaries
+            leftSummary.innerHTML = `<strong>Summary:</strong> ${removedWords} words removed (${removedCount} changes)`;
+            rightSummary.innerHTML = `<strong>Summary:</strong> ${addedWords} words added (${addedCount} changes)`;
+            mergeSummary.innerHTML = `<strong>Changes:</strong> ${addedCount + removedCount} differences found`;
+
+            // Build chunk list for merging
+            buildChunkList(diffs);
+        }
+
+        function createPlaceholder(text) {
+            // Create invisible placeholder to maintain alignment
+            // Replace visible characters with spaces, keep whitespace
+            return text.replace(/[^\s]/g, '\u00A0');
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function countWords(text) {
+            return text.trim().split(/\s+/).filter(w => w.length > 0).length;
+        }
+
+        function buildChunkList(diffs) {
+            if (diffs.length === 0) {
+                chunkList.innerHTML = '<div style="padding: 20px; color: #888; text-align: center;">No differences found</div>';
+                return;
+            }
+
+            let html = '';
+            let hasChanges = false;
+
+            diffs.forEach((part, index) => {
+                if (part.added || part.removed) {
+                    hasChanges = true;
+                    const typeClass = part.added ? 'chunk-type-added' : 'chunk-type-removed';
+                    const btnClass = part.added ? 'btn-right' : 'btn-left';
+                    const label = part.added ? 'Add' : 'Keep';
+                    const preview = part.value.length > 100 ? part.value.substring(0, 100) + '...' : part.value;
+
+                    html += `
+                        <div class="chunk-item ${typeClass}">
+                            <button class="${btnClass}" onclick="addChunk(${index})">${label}</button>
+                            <div class="chunk-text">${escapeHtml(preview)}</div>
+                        </div>
+                    `;
+                }
+            });
+
+            if (!hasChanges) {
+                chunkList.innerHTML = '<div style="padding: 20px; color: #888; text-align: center;">Texts are identical</div>';
+            } else {
+                chunkList.innerHTML = html;
+            }
+        }
+
+        function addChunk(index) {
+            const chunk = currentDiffs[index];
+            if (chunk) {
+                const textarea = mergedOutput;
+                const start = textarea.selectionStart;
+                const end = textarea.selectionEnd;
+                const text = textarea.value;
+
+                textarea.value = text.substring(0, start) + chunk.value + text.substring(end);
+                textarea.focus();
+                textarea.selectionStart = textarea.selectionEnd = start + chunk.value.length;
+            }
+        }
+
+        function useLeftText() {
+            mergedOutput.value = leftInput.value;
+        }
+
+        function useRightText() {
+            mergedOutput.value = rightInput.value;
+        }
+
+        function clearMerged() {
+            mergedOutput.value = '';
+        }
+
+        function copyMerged() {
+            mergedOutput.select();
+            navigator.clipboard.writeText(mergedOutput.value).then(() => {
+                const btn = event.target;
+                const originalText = btn.textContent;
+                btn.textContent = 'Copied!';
+                setTimeout(() => btn.textContent = originalText, 1500);
+            });
+        }
+
+        // Initialize
+        updateDiff();
+    </script>
+</body>
+</html>
