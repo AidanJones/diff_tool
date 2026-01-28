@@ -38,9 +38,18 @@
             height: 20px;
             border-radius: 3px;
         }
-        .color-same { background: #e0e0e0; }
-        .color-removed { background: #ffcc80; }
+        .color-same { background: #e8e8e8; }
+        .color-removed { background: #ffcdd2; }
         .color-added { background: #c8e6c9; }
+        .color-placeholder {
+            background: repeating-linear-gradient(
+                45deg,
+                #d0d0d0,
+                #d0d0d0 2px,
+                #e8e8e8 2px,
+                #e8e8e8 4px
+            );
+        }
 
         .container {
             display: grid;
@@ -108,11 +117,11 @@
             word-wrap: break-word;
         }
         .diff-display .same {
-            background: #e0e0e0;
+            background: #e8e8e8;
             padding: 1px 0;
         }
         .diff-display .removed {
-            background: #ffcc80;
+            background: #ffcdd2;
             padding: 1px 0;
         }
         .diff-display .added {
@@ -120,8 +129,13 @@
             padding: 1px 0;
         }
         .diff-display .placeholder {
-            background: #ffcc80;
-            opacity: 0.3;
+            background: repeating-linear-gradient(
+                45deg,
+                #d0d0d0,
+                #d0d0d0 2px,
+                #e8e8e8 2px,
+                #e8e8e8 4px
+            );
             padding: 1px 0;
         }
 
@@ -144,11 +158,11 @@
             transition: background 0.2s;
         }
         .btn-left {
-            background: #ffcc80;
+            background: #ffcdd2;
             color: #333;
         }
         .btn-left:hover {
-            background: #ffb74d;
+            background: #ef9a9a;
         }
         .btn-right {
             background: #c8e6c9;
@@ -207,10 +221,20 @@
             text-overflow: ellipsis;
         }
         .chunk-type-removed {
-            background: #fff3e0;
+            background: #ffebee;
         }
         .chunk-type-added {
             background: #e8f5e9;
+        }
+        .chunk-type-same {
+            background: #f5f5f5;
+        }
+        .btn-same {
+            background: #e8e8e8;
+            color: #333;
+        }
+        .btn-same:hover {
+            background: #bdbdbd;
         }
 
         .summary {
@@ -248,6 +272,10 @@
         <div class="legend-item">
             <div class="legend-color color-added"></div>
             <span>Added</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color color-placeholder"></div>
+            <span>Gap</span>
         </div>
     </div>
 
@@ -455,27 +483,44 @@
             }
 
             let html = '';
-            let hasChanges = false;
+            let hasContent = false;
 
             diffs.forEach((part, index) => {
-                if (part.added || part.removed) {
-                    hasChanges = true;
-                    const typeClass = part.added ? 'chunk-type-added' : 'chunk-type-removed';
-                    const btnClass = part.added ? 'btn-right' : 'btn-left';
-                    const label = part.added ? 'Add' : 'Keep';
-                    const preview = part.value.length > 100 ? part.value.substring(0, 100) + '...' : part.value;
-
-                    html += `
-                        <div class="chunk-item ${typeClass}">
-                            <button class="${btnClass}" onclick="addChunk(${index})">${label}</button>
-                            <div class="chunk-text">${escapeHtml(preview)}</div>
-                        </div>
-                    `;
+                // Skip empty or whitespace-only parts for same text
+                const trimmed = part.value.trim();
+                if (!part.added && !part.removed && trimmed.length === 0) {
+                    return;
                 }
+
+                hasContent = true;
+                let typeClass, btnClass, label;
+
+                if (part.added) {
+                    typeClass = 'chunk-type-added';
+                    btnClass = 'btn-right';
+                    label = 'Add';
+                } else if (part.removed) {
+                    typeClass = 'chunk-type-removed';
+                    btnClass = 'btn-left';
+                    label = 'Keep';
+                } else {
+                    typeClass = 'chunk-type-same';
+                    btnClass = 'btn-same';
+                    label = 'Common';
+                }
+
+                const preview = part.value.length > 100 ? part.value.substring(0, 100) + '...' : part.value;
+
+                html += `
+                    <div class="chunk-item ${typeClass}">
+                        <button class="${btnClass}" onclick="addChunk(${index})">${label}</button>
+                        <div class="chunk-text">${escapeHtml(preview)}</div>
+                    </div>
+                `;
             });
 
-            if (!hasChanges) {
-                chunkList.innerHTML = '<div style="padding: 20px; color: #888; text-align: center;">Texts are identical</div>';
+            if (!hasContent) {
+                chunkList.innerHTML = '<div style="padding: 20px; color: #888; text-align: center;">No content to display</div>';
             } else {
                 chunkList.innerHTML = html;
             }
