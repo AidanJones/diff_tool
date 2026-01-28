@@ -5,6 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Text Comparison Tool</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jsdiff/5.1.0/diff.min.js"></script>
+    <!-- PDF.js for PDF parsing -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <!-- Mammoth.js for Word document parsing -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
     <style>
         * {
             box-sizing: border-box;
@@ -88,6 +92,76 @@
         }
         .file-input-wrapper {
             margin-bottom: 10px;
+        }
+        .drop-zone {
+            border: 2px dashed #ccc;
+            border-radius: 6px;
+            padding: 15px;
+            text-align: center;
+            transition: all 0.2s;
+            cursor: pointer;
+            background: #fafafa;
+        }
+        .drop-zone:hover {
+            border-color: #888;
+            background: #f0f0f0;
+        }
+        .drop-zone.drag-over {
+            border-color: #4a90d9;
+            background: #e8f4fc;
+        }
+        .drop-zone.loading {
+            opacity: 0.7;
+            pointer-events: none;
+        }
+        .drop-zone input[type="file"] {
+            display: none;
+        }
+        .drop-zone-text {
+            color: #666;
+            font-size: 13px;
+        }
+        .drop-zone-text small {
+            display: block;
+            margin-top: 5px;
+            color: #999;
+            font-size: 11px;
+        }
+        .file-status {
+            margin-top: 8px;
+            font-size: 12px;
+            padding: 6px 10px;
+            border-radius: 4px;
+            display: none;
+        }
+        .file-status.show {
+            display: block;
+        }
+        .file-status.success {
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+        .file-status.error {
+            background: #ffebee;
+            color: #c62828;
+        }
+        .file-status.loading {
+            background: #e3f2fd;
+            color: #1565c0;
+        }
+        .spinner {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border: 2px solid #1565c0;
+            border-top-color: transparent;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            vertical-align: middle;
+            margin-right: 6px;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
         }
         textarea {
             width: 100%;
@@ -288,7 +362,14 @@
             </h2>
             <div class="input-section">
                 <div class="file-input-wrapper">
-                    <input type="file" id="left-file" accept=".txt,.md,.html,.css,.js,.json,.xml,.csv">
+                    <div class="drop-zone" id="left-drop-zone">
+                        <input type="file" id="left-file" accept=".txt,.md,.html,.css,.js,.json,.xml,.csv,.rtf,.pdf,.doc,.docx">
+                        <div class="drop-zone-text">
+                            Drop file here or click to upload
+                            <small>Supports: TXT, MD, PDF, DOCX, RTF, HTML, CSS, JS, JSON, XML, CSV</small>
+                        </div>
+                    </div>
+                    <div class="file-status" id="left-file-status"></div>
                 </div>
                 <textarea id="left-input" placeholder="Paste or type your original text here..."></textarea>
             </div>
@@ -330,7 +411,14 @@
             </h2>
             <div class="input-section">
                 <div class="file-input-wrapper">
-                    <input type="file" id="right-file" accept=".txt,.md,.html,.css,.js,.json,.xml,.csv">
+                    <div class="drop-zone" id="right-drop-zone">
+                        <input type="file" id="right-file" accept=".txt,.md,.html,.css,.js,.json,.xml,.csv,.rtf,.pdf,.doc,.docx">
+                        <div class="drop-zone-text">
+                            Drop file here or click to upload
+                            <small>Supports: TXT, MD, PDF, DOCX, RTF, HTML, CSS, JS, JSON, XML, CSV</small>
+                        </div>
+                    </div>
+                    <div class="file-status" id="right-file-status"></div>
                 </div>
                 <textarea id="right-input" placeholder="Paste or type your modified text here..."></textarea>
             </div>
@@ -342,6 +430,9 @@
     </div>
 
     <script>
+        // Configure PDF.js worker
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
         // Elements
         const leftInput = document.getElementById('left-input');
         const rightInput = document.getElementById('right-input');
@@ -349,6 +440,10 @@
         const rightDiff = document.getElementById('right-diff');
         const leftFile = document.getElementById('left-file');
         const rightFile = document.getElementById('right-file');
+        const leftDropZone = document.getElementById('left-drop-zone');
+        const rightDropZone = document.getElementById('right-drop-zone');
+        const leftFileStatus = document.getElementById('left-file-status');
+        const rightFileStatus = document.getElementById('right-file-status');
         const mergedOutput = document.getElementById('merged-output');
         const chunkList = document.getElementById('chunk-list');
         const leftSummary = document.getElementById('left-summary');
@@ -359,20 +454,146 @@
 
         let currentDiffs = [];
 
-        // File reading
-        leftFile.addEventListener('change', (e) => readFile(e, leftInput));
-        rightFile.addEventListener('change', (e) => readFile(e, rightInput));
+        // File reading - setup for both sides
+        setupDropZone(leftDropZone, leftFile, leftInput, leftFileStatus);
+        setupDropZone(rightDropZone, rightFile, rightInput, rightFileStatus);
 
-        function readFile(event, targetTextarea) {
-            const file = event.target.files[0];
-            if (file) {
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    targetTextarea.value = e.target.result;
-                    updateDiff();
-                };
-                reader.readAsText(file);
+        function setupDropZone(dropZone, fileInput, textarea, statusEl) {
+            // Click to open file dialog
+            dropZone.addEventListener('click', () => fileInput.click());
+
+            // File input change
+            fileInput.addEventListener('change', (e) => {
+                if (e.target.files[0]) {
+                    processFile(e.target.files[0], textarea, dropZone, statusEl);
+                }
+            });
+
+            // Drag and drop
+            dropZone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                dropZone.classList.add('drag-over');
+            });
+
+            dropZone.addEventListener('dragleave', () => {
+                dropZone.classList.remove('drag-over');
+            });
+
+            dropZone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                dropZone.classList.remove('drag-over');
+                if (e.dataTransfer.files[0]) {
+                    processFile(e.dataTransfer.files[0], textarea, dropZone, statusEl);
+                }
+            });
+        }
+
+        function showStatus(statusEl, message, type) {
+            statusEl.className = 'file-status show ' + type;
+            statusEl.innerHTML = type === 'loading'
+                ? '<span class="spinner"></span>' + message
+                : message;
+        }
+
+        function hideStatus(statusEl) {
+            statusEl.className = 'file-status';
+        }
+
+        async function processFile(file, textarea, dropZone, statusEl) {
+            const ext = file.name.split('.').pop().toLowerCase();
+
+            dropZone.classList.add('loading');
+            showStatus(statusEl, `Processing ${file.name}...`, 'loading');
+
+            try {
+                let text;
+
+                if (ext === 'pdf') {
+                    text = await extractPdfText(file);
+                } else if (ext === 'docx') {
+                    text = await extractDocxText(file);
+                } else if (ext === 'doc') {
+                    throw new Error('Legacy .doc format not supported. Please convert to .docx');
+                } else if (ext === 'rtf') {
+                    text = await extractRtfText(file);
+                } else {
+                    // Plain text formats
+                    text = await readAsText(file);
+                }
+
+                textarea.value = text;
+                updateDiff();
+                showStatus(statusEl, `Loaded: ${file.name} (${formatFileSize(file.size)})`, 'success');
+            } catch (error) {
+                console.error('File processing error:', error);
+                showStatus(statusEl, `Error: ${error.message}`, 'error');
+            } finally {
+                dropZone.classList.remove('loading');
             }
+        }
+
+        function formatFileSize(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+        }
+
+        function readAsText(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = (e) => resolve(e.target.result);
+                reader.onerror = () => reject(new Error('Failed to read file'));
+                reader.readAsText(file);
+            });
+        }
+
+        async function extractPdfText(file) {
+            const arrayBuffer = await file.arrayBuffer();
+            const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+
+            let fullText = '';
+            for (let i = 1; i <= pdf.numPages; i++) {
+                const page = await pdf.getPage(i);
+                const textContent = await page.getTextContent();
+                const pageText = textContent.items.map(item => item.str).join(' ');
+                fullText += pageText + '\n\n';
+            }
+            return fullText.trim();
+        }
+
+        async function extractDocxText(file) {
+            const arrayBuffer = await file.arrayBuffer();
+            const result = await mammoth.extractRawText({ arrayBuffer });
+            return result.value;
+        }
+
+        async function extractRtfText(file) {
+            const text = await readAsText(file);
+            // Basic RTF to plain text conversion
+            // Remove RTF control words and groups
+            let plain = text
+                // Remove RTF header
+                .replace(/^\{\\rtf1[^}]*\}/g, '')
+                // Remove font tables, color tables, etc.
+                .replace(/\{\\fonttbl[^}]*\}/g, '')
+                .replace(/\{\\colortbl[^}]*\}/g, '')
+                .replace(/\{\\stylesheet[^}]*\}/g, '')
+                // Convert common RTF sequences
+                .replace(/\\par\s*/g, '\n')
+                .replace(/\\line\s*/g, '\n')
+                .replace(/\\tab\s*/g, '\t')
+                // Remove control words
+                .replace(/\\[a-z]+\d*\s?/gi, '')
+                // Remove remaining braces
+                .replace(/[{}]/g, '')
+                // Clean up whitespace
+                .replace(/\n{3,}/g, '\n\n')
+                .trim();
+
+            if (!plain || plain.length < 10) {
+                throw new Error('Could not extract text from RTF. Try converting to TXT first.');
+            }
+            return plain;
         }
 
         // Debounced diff update
